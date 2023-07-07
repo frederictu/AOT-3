@@ -1,1 +1,0 @@
-...if enabled a logfile for each game will be safed in here with random name
