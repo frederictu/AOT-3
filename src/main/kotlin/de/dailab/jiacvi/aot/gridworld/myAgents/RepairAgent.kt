@@ -18,6 +18,7 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
     lateinit var repairPoints: List<Position>
     var obstacles: List<Position>? = null
 
+
     override fun preStart() {
 
     }
@@ -33,6 +34,7 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
         on<CurrentPosition> {
                 currentPos ->
             log.info("Received current position: $currentPos")
+            print("Shortest path from ${currentPos.position} to ${repairPoints[0]}: ${shortestPath(obstacles, size, currentPos.position, repairPoints[0])}")
             system.resolve("server") invoke ask<WorkerActionResponse>(WorkerActionRequest(repairID, WorkerAction.EAST)) {
                     actionResponse ->
                 log.info("Received worker response: $actionResponse")
