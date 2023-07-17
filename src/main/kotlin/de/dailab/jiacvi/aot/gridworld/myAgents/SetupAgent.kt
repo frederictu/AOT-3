@@ -4,6 +4,7 @@ import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.aot.gridworld.*
 import de.dailab.jiacvi.behaviour.act
 import java.io.File
+import java.io.IOException
 
 class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
 
@@ -18,8 +19,7 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
 
 
     override fun behaviour() = act {
-        lateinit var grid: String
-        grid = readFileLineByLineUsingForEachLine("example.grid", grid)
+        val grid = readFile("/home/stanley/AOT-3/src/main/resources/grids/example.grid")
 
         ask<SetupGameResponse>(SetupGameMessage(setupID, grid)) {
             res ->
@@ -33,7 +33,11 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
     }
 }
 
-
-fun readFileLineByLineUsingForEachLine(fileName: String, grid: String) {
-    File(fileName).forEachLine {  }
+fun readFile(fileName: String): String {
+    return try {
+        File(fileName).readText()
+    } catch (e: IOException) {
+        e.printStackTrace()
+        "Error reading the file: ${e.message}"
+    }
 }
