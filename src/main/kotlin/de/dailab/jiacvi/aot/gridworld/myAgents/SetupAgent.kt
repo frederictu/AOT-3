@@ -3,6 +3,7 @@ package de.dailab.jiacvi.aot.gridworld.myAgents
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.aot.gridworld.*
 import de.dailab.jiacvi.behaviour.act
+import java.io.File
 
 class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
 
@@ -14,12 +15,25 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
         - start the game by telling the server "StartGame(setupID)"
      */
 
+
+
     override fun behaviour() = act {
+        lateinit var grid: String
+        grid = readFileLineByLineUsingForEachLine("example.grid", grid)
 
+        ask<SetupGameResponse>(SetupGameMessage(setupID, grid)) {
+            res ->
+                log.info("Received SetupGameResponse: $res")
 
+        }
 
         on<EndGameMessage> {
             log.info("Received $it")
         }
     }
+}
+
+
+fun readFileLineByLineUsingForEachLine(fileName: String, grid: String) {
+    File(fileName).forEachLine {  }
 }
