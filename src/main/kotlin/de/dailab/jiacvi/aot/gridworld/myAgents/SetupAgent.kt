@@ -22,7 +22,13 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
         system.resolve("server") invoke ask<SetupGameResponse>(SetupGameMessage(setupID, "/grids/example.grid")) {
                 res ->
             log.info("Received SetupGameResponse: $res")
-
+            res.collectorIDs.forEach { collectorID ->
+                system.spawnAgent(CollectAgent(collectorID))
+            }
+            res.repairIDs.forEach { repairID ->
+                system.spawnAgent(RepairAgent(repairID))
+            }
+            system.resolve("server") tell StartGame(setupID)
         }
     }
     override fun behaviour() = act {
