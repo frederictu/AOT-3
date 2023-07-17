@@ -17,16 +17,16 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
      */
 
 
-
-    override fun behaviour() = act {
-        val grid = readFile("/home/stanley/AOT-3/src/main/resources/grids/example.grid")
-
-        ask<SetupGameResponse>(SetupGameMessage(setupID, grid)) {
-            res ->
-                log.info("Received SetupGameResponse: $res")
+    override fun preStart() {
+        super.preStart()
+        val grid = "/grids/example.grid"
+        system.resolve("server") invoke ask<SetupGameResponse>(SetupGameMessage(setupID, grid)) {
+                res ->
+            log.info("Received SetupGameResponse: $res")
 
         }
-
+    }
+    override fun behaviour() = act {
         on<EndGameMessage> {
             log.info("Received $it")
         }
