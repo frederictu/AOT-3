@@ -19,8 +19,7 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
 
     override fun preStart() {
         super.preStart()
-        val grid = "/grids/example.grid"
-        system.resolve("server") invoke ask<SetupGameResponse>(SetupGameMessage(setupID, grid)) {
+        system.resolve("server") invoke ask<SetupGameResponse>(SetupGameMessage(setupID, "/grids/example.grid")) {
                 res ->
             log.info("Received SetupGameResponse: $res")
 
@@ -30,14 +29,5 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
         on<EndGameMessage> {
             log.info("Received $it")
         }
-    }
-}
-
-fun readFile(fileName: String): String {
-    return try {
-        File(fileName).readText()
-    } catch (e: IOException) {
-        e.printStackTrace()
-        "Error reading the file: ${e.message}"
     }
 }
