@@ -10,12 +10,17 @@ import java.util.*
 
 
 data class StartAgentMessage(val size: Position, val repairIds: List<String>, val collectorIDs: List<String>,val repairPoints: List<Position>, val obstacles: List<Position>?)
+data class repairAgentPosition(val position: Position)
+data class cfp(val message:String, val mypos: Position)
+data class cnpResponse(val response: Boolean)
+data class makeOffer(val offer: Int)
+
 
 data class Node(val position: Position, val parent: Node?, val action: WorkerAction?, val cost: Int, val heuristic: Int) {
     val score get() = cost + heuristic
 }
 
-fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentPosition: Position, target: Position): List<WorkerAction> {
+public fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentPosition: Position, target: Position): List<WorkerAction> {
     val actions = listOf(
         WorkerAction.NORTH to Position(0, -1),
         WorkerAction.NORTHEAST to Position(1, -1),

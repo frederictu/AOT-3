@@ -10,6 +10,10 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
         - NOTE: can not walk on open repairpoints, can not drop material
         - find material, collect it, start a cnp instance
         - once your cnp is done, meet the RepairAgents and transfer the material
+        CNP
+        - notify all repair Agents as soon as Materials are found
+        - get offers from Agents (offers are calculated execution times)
+        - accept most efficient agent and go to dropoff
      */
 
     lateinit var size: Position
@@ -38,5 +42,12 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
                 log.info("Received worker response: $actionResponse")
             }
         }
+        /*TODO: - GET POSITIONS FROM EACH REPAIR-AGENT
+           - GET EFFICIENCIES OF EACH AGENT
+           - ACCEPT MOST EFFICIENT AGENT AND GO TO HIM ON SHORTEST PATH
+           - GET DISTANCES
+
+        */
+
     }
 }
