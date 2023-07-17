@@ -37,6 +37,7 @@ class SetupAgent (private val setupID: String): Agent(overrideName=setupID) {
     override fun behaviour() = act {
         on<GameTurnInform> {
             // TODO: Optional: respond to game turn
+
         }
         on<EndGameMessage> {
             log.info("Received $it")

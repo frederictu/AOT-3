@@ -12,11 +12,24 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
         - once your cnp is done, meet the RepairAgents and transfer the material
      */
 
+    lateinit var size: Position
+    lateinit var repairIds: List<String>
+    lateinit var collectorIDs: List<String>
+    lateinit var repairPoints: List<Position>
+    var obstacles: List<Position>? = null
+
     override fun preStart() {
     }
 
 
     override fun behaviour() = act {
+        on<StartAgentMessage> {
+            size = it.size
+            repairIds = it.repairIds
+            collectorIDs = it.collectorIDs
+            repairPoints = it.repairPoints
+            obstacles = it.obstacles
+        }
         on<CurrentPosition> {
             currentPos ->
             log.info("Received current position: $currentPos")
