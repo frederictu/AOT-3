@@ -33,21 +33,19 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
     override fun preStart() {
     }
 
-
-    fun getRandomTarget(currentPosition: Position) {
-        var possiblePositions = mutableListOf<Position>(
-            currentPosition + Position(0, 1),
-            currentPosition + Position(1, 0),
-            currentPosition + Position(1, 1),
-            currentPosition + Position(0, -1),
-            currentPosition + Position(-1, 0),
-            currentPosition + Position(-1, -1),
-            currentPosition + Position(1, -1),
-            currentPosition + Position(-1, 1)
-            )
-        return possiblePositions.filter {
-            position ->
-            position.
+    private fun getRandomTarget(currentPosition: Position): WorkerAction? {
+        val possibleActions = mutableListOf<WorkerAction>()
+        for ((action, movement) in getActionPositions()) {
+            val newPosition = currentPosition + movement
+            if (newPosition.x in 0 until size.x && newPosition.y in 0 until size.y
+                && !obstacles!!.contains(newPosition) && !visited.contains(newPosition)) {
+                possibleActions.add(action)
+            }
+        }
+        return if (possibleActions.isNotEmpty()) {
+            possibleActions[Random.nextInt(possibleActions.size)]
+        } else {
+            null
         }
     }
 

@@ -18,7 +18,8 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
     lateinit var repairIds: List<String>
     lateinit var collectorIDs: List<String>
     lateinit var repairPoints: List<Position>
-    var overhead: Int = 0
+
+    var offerCollectAgentID: String? = null
 
     var obstacles: List<Position>? = null
 
@@ -33,7 +34,7 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
         var shortestPath: Int
         for( repairPoint in repairPoints) {
             shortestPath = shortestPath(obstacles, size, currentPosition, repairPoint).size
-            if( shortestPath < min || min != -1){
+            if( shortestPath < min){
                 min = shortestPath
                 nearestRepairPoint = repairPoint
             }
@@ -46,15 +47,19 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
         return wa.slice(0..wa.size/2)
     }
 
-    fun calculateEfficiency(collectorPos: Position, overhead: Int): Int{
+
+    fun calculateEfficiency(collectorPos: Position, overhead:Int): Int{
         val NearestRP: Int = shortestPath(obstacles, size, currentPosition, getNearestRepairPoint()).size
         val distanceCollector: Int = shortestPath(obstacles, size, currentPosition, collectorPos).size
 
-        return NearestRP + distanceCollector + overhead
+        return NearestRP + distanceCollector
     }
 
 
     override fun behaviour() = act {
+        var overhead: Int  = 0
+        var offer: Int = 0
+
         on<StartAgentMessage> {
             size = it.size
             repairIds = it.repairIds
@@ -64,23 +69,17 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
         }
         on<CurrentPosition> {
                 currentPos ->
-            log.info("Received current position: $currentPos")
-            print("Shortest path from ${currentPos.position} to ${repairPoints[0]}: ${shortestPath(obstacles, size, currentPos.position, repairPoints[0])}")
-            /*system.resolve("server") invoke ask<WorkerActionResponse>(WorkerActionRequest(repairID, WorkerAction.EAST)) {
-                    actionResponse ->
-                log.info("Received worker response: $actionResponse")
-            }*/
-        }
 
-        on<cfp> {
-            log.info("Received cfp. Enhance!")
-            respond<cfp, makeOffer> {
-              cnpResponse ->
-                return@respond makeOffer(calculateEfficiency(cnpResponse.mypos, overhead))
 
 
             }
-        }
+//        system.resolve(repairID) invoke ask<CNPCollectAgentReponse> {
+//                resp ->
+//            log.info("Received response.")
+//            if(resp.response == true){
+//            }
+//        }
+
     }
 
 }
