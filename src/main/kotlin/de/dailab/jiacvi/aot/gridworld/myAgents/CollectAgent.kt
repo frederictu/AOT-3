@@ -3,6 +3,7 @@ package de.dailab.jiacvi.aot.gridworld.myAgents
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.aot.gridworld.*
 import de.dailab.jiacvi.behaviour.act
+import java.util.*
 
 class CollectAgent (private val collectID: String): Agent(overrideName=collectID) {
     /* TODO
@@ -22,9 +23,22 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
     lateinit var repairPoints: List<Position>
     var obstacles: List<Position>? = null
 
+    var randomWalk = true
+    var holdingMaterial = false
+    var currentPath = Stack<WorkerAction>()
+    var activeMaterials = mutableSetOf<Position>()
+    var deadMaterials = mutableSetOf<Position>()
+    var visited = mutableSetOf<Position>()
+
     override fun preStart() {
     }
 
+
+    fun getRandomTarget(currentPosition: Position) {
+        possiblePositions = mutableListOf<Position>(currentPosition + Position(0, 1),
+            currentPosition + Position(1, 0),
+            currentPosition + )
+    }
 
     override fun behaviour() = act {
         on<StartAgentMessage> {
@@ -37,6 +51,24 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
         on<CurrentPosition> {
             currentPos ->
             log.info("Received current position: $currentPos")
+            visited.add(currentPos.position)
+            if (randomWalk) {
+                currentPos.vision.forEach {
+                    materialStorage ->
+                    if (!deadMaterials.contains(materialStorage)) {
+                        activeMaterials.add(materialStorage)
+                    }
+                }
+                if (!holdingMaterial && activeMaterials.isNotEmpty()) {
+                    randomWalk = false
+                    currentPath.clear()
+                    currentPath.addAll(shortestPath(obstacles, size, currentPos.position, activeMaterials.first()))
+                }
+                else {
+                    randomTarget = getRandomTarget(currentPos.position)
+                }
+            }
+
             system.resolve("server") invoke ask<WorkerActionResponse>(WorkerActionRequest(collectID, WorkerAction.SOUTHEAST)) {
                 actionResponse ->
                 log.info("Received worker response: $actionResponse")
