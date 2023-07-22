@@ -3,7 +3,8 @@ package de.dailab.jiacvi.aot.gridworld.myAgents
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.aot.gridworld.*
 import de.dailab.jiacvi.behaviour.act
-import de.dailab.jiacvi.dispatch.InternalMessage
+import java.util.*
+import kotlin.random.Random
 
 class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
     /* TODO
@@ -36,7 +37,7 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
     }
 
     fun getNearestRepairPoint():Position{
-        var min: Int = -1
+        var min: Int = Int.MAX_VALUE
         var nearestRepairPoint: Position = Position(-1,-1)
         var shortestPath: Int
         for( repairPoint in repairPoints) {

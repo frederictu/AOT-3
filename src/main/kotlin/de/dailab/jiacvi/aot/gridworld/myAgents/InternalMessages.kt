@@ -1,27 +1,27 @@
 package de.dailab.jiacvi.aot.gridworld.myAgents
 
-import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.aot.gridworld.*
-import de.dailab.jiacvi.behaviour.act
-import java.io.File
-import java.io.IOException
-import java.lang.Math.abs
 import java.util.*
 
+val CFP_TOPIC_NAME: String = "CFP"
 
 data class StartAgentMessage(val size: Position, val repairIds: List<String>, val collectorIDs: List<String>,val repairPoints: List<Position>, val obstacles: List<Position>?)
-data class repairAgentPosition(val position: Position)
-data class cfp(val message:String, val mypos: Position)
-data class cnpResponse(val response: Boolean)
-data class makeOffer(val offer: Int)
+data class RepairAgentPosition(val position: Position)
+data class CFP(val collectAgentID: String, val mypos: Position)
+data class CNPCollectAgentResponse(val collectAgentID: String, val response: Boolean)
+// When offer == -1, contract declined
+data class CNPRepairAgentOffer(val repairAgentID: String, val offeredPosition: Position, val deadline: Int, val offer: Int)
+
+data class CNPRepairAgentResult(val success:Boolean)
+
 
 
 data class Node(val position: Position, val parent: Node?, val action: WorkerAction?, val cost: Int, val heuristic: Int) {
     val score get() = cost + heuristic
 }
 
-public fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentPosition: Position, target: Position): List<WorkerAction> {
-    val actions = listOf(
+fun getActionPositions() : List<Pair<WorkerAction, Position>> {
+    return listOf(
         WorkerAction.NORTH to Position(0, -1),
         WorkerAction.NORTHEAST to Position(1, -1),
         WorkerAction.EAST to Position(1, 0),
@@ -31,6 +31,10 @@ public fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentP
         WorkerAction.WEST to Position(-1, 0),
         WorkerAction.NORTHWEST to Position(-1, -1)
     )
+}
+
+fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentPosition: Position, target: Position): List<WorkerAction> {
+
 
     val openList = PriorityQueue(compareBy<Node> { it.score })
     val closedList = mutableMapOf<Position, Node>()
@@ -54,7 +58,7 @@ public fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentP
 
         closedList[current.position] = current
 
-        for ((action, movement) in actions) {
+        for ((action, movement) in getActionPositions()) {
             val newPosition = current.position + movement
 
             if (newPosition.x in 0 until gridSize.x && newPosition.y in 0 until gridSize.y && newPosition !in obstacles!! && newPosition !in closedList) {

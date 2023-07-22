@@ -1,9 +1,11 @@
 package de.dailab.jiacvi.aot.gridworld.myAgents
 
 import de.dailab.jiacvi.Agent
+import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.aot.gridworld.*
 import de.dailab.jiacvi.behaviour.act
 import java.util.*
+import kotlin.random.Random
 
 class CollectAgent (private val collectID: String): Agent(overrideName=collectID) {
     /* TODO
@@ -17,18 +19,26 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
         - accept most efficient agent and go to dropoff
      */
 
-    lateinit var size: Position
-    lateinit var repairIds: List<String>
-    lateinit var collectorIDs: List<String>
-    lateinit var repairPoints: List<Position>
-    var obstacles: List<Position>? = null
+    // msgBroker only used for sending broadcasts
+    private val msgBroker by resolve<BrokerAgentRef>()
 
-    var randomWalk = true
-    var holdingMaterial = false
-    var currentPath = Stack<WorkerAction>()
-    var activeMaterials = mutableSetOf<Position>()
-    var deadMaterials = mutableSetOf<Position>()
-    var visited = mutableSetOf<Position>()
+    private lateinit var size: Position
+    private lateinit var repairIds: List<String>
+    private lateinit var collectorIDs: List<String>
+    private lateinit var repairPoints: List<Position>
+    private var obstacles: List<Position>? = null
+
+    private var randomWalk = true
+    private var holdingMaterial = false
+    private var currentPath = Stack<WorkerAction>()
+    private var activeMaterials = mutableSetOf<Position>()
+    private var deadMaterials = mutableSetOf<Position>()
+    private var visited = mutableSetOf<Position>()
+    private var targetRepairAgentID: String? = null
+
+
+    private var CNPStarted = false
+    private var CNPOffers = mutableListOf<CNPRepairAgentOffer>()
 
     override fun preStart() {
     }
@@ -49,6 +59,22 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
         }
     }
 
+    private fun getPathToNearestMaterial(currentPosition: Position): List<WorkerAction>? {
+        var min: Int = Int.MAX_VALUE
+        var shortestPath: List<WorkerAction>? = null
+        for( materialPosition in activeMaterials) {
+            shortestPath = shortestPath(obstacles, size, currentPosition, materialPosition)
+            if( shortestPath.size < min ){
+                min = shortestPath.size
+            }
+        }
+        return shortestPath
+    }
+
+    private fun getBestOffer(): CNPRepairAgentOffer? {
+        return CNPOffers.minBy { it.offer }
+    }
+
     override fun behaviour() = act {
         on<StartAgentMessage> {
             size = it.size
@@ -57,38 +83,112 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
             repairPoints = it.repairPoints
             obstacles = it.obstacles
         }
-        on<CurrentPosition> {
-            currentPos ->
-            log.info("Received current position: $currentPos")
-            visited.add(currentPos.position)
-            if (randomWalk) {
-                currentPos.vision.forEach {
-                    materialStorage ->
-                    if (!deadMaterials.contains(materialStorage)) {
-                        activeMaterials.add(materialStorage)
+        on<CNPRepairAgentOffer>{
+                newOffer ->
+                CNPOffers.add(newOffer)
+                if (CNPOffers.size >= repairIds.size) {
+                    val bestOffer =  getBestOffer()
+                    if (bestOffer == null) {
+                        log.error("No best offer found!! This should not happen.")
+                    }
+                    CNPOffers.forEach {
+                        offer ->
+                        val accepted = offer.repairAgentID == bestOffer!!.repairAgentID
+                        system.resolve(offer.repairAgentID) tell CNPCollectAgentResponse(offer.repairAgentID, accepted)
+                    }
+                    CNPStarted = false
+                    CNPOffers.clear()
+                }
+
+        }
+        on<CurrentPosition> { currentPositionMessage ->
+            log.info("Received current position: $currentPositionMessage")
+            if (CNPStarted) {
+                log.warn("New round started while CNP running! Skipping requests this round.")
+            } else {
+                visited.add(currentPositionMessage.position)
+                if (randomWalk) {
+                    currentPositionMessage.vision.forEach { materialStorage ->
+                        if (!deadMaterials.contains(materialStorage)) {
+                            activeMaterials.add(materialStorage)
+                        }
+                    }
+                    if (!holdingMaterial && activeMaterials.isNotEmpty()) {
+                        randomWalk = false
+                        currentPath.clear()
+                        currentPath.addAll(
+                            shortestPath(
+                                obstacles,
+                                size,
+                                currentPositionMessage.position,
+                                activeMaterials.first()
+                            )
+                        )
+                    } else {
+                        val randomTarget = getRandomTarget(currentPositionMessage.position)
+                        currentPath.clear()
+                        currentPath.add(randomTarget)
                     }
                 }
-                if (!holdingMaterial && activeMaterials.isNotEmpty()) {
-                    randomWalk = false
-                    currentPath.clear()
-                    currentPath.addAll(shortestPath(obstacles, size, currentPos.position, activeMaterials.first()))
-                }
-                else {
-                    randomTarget = getRandomTarget(currentPos.position)
-                }
-            }
 
-            system.resolve("server") invoke ask<WorkerActionResponse>(WorkerActionRequest(collectID, WorkerAction.SOUTHEAST)) {
-                actionResponse ->
-                log.info("Received worker response: $actionResponse")
+                var targetAction: WorkerAction? = null;
+
+                if (currentPath.isNotEmpty()) {
+                    targetAction = currentPath.pop()
+                }
+
+                // Got to the end of path
+                // Either standing on meeting point or on material
+                if (targetAction == null) {
+                    val targetRepairAgent = targetRepairAgentID
+                    if (holdingMaterial && targetRepairAgent !== null) {
+                        //system.resolve("server") tell TransferMaterial(collectID, targetRepairAgent)
+                        holdingMaterial = false
+                        currentPath.clear()
+                        currentPath.addAll(getPathToNearestMaterial(currentPositionMessage.position)!!)
+                    } else if (!holdingMaterial && activeMaterials.contains(currentPositionMessage.position)) {
+                        targetAction = WorkerAction.TAKE
+                    } else {
+                        log.error("Got to meeting point but no target agent or material found!")
+                    }
+                }
+                if (targetAction != null) {
+                    system.resolve("server") invoke ask<WorkerActionResponse>(
+                        WorkerActionRequest(collectID, targetAction)
+                    ) { actionResponse ->
+                        log.info("Received worker response: $actionResponse")
+
+                        // Tried to take material
+                        if (targetAction == WorkerAction.TAKE) {
+                            // Start CNP
+                            if (actionResponse.state) {
+                                msgBroker.publish(CFP_TOPIC_NAME, CFP(collectID, currentPositionMessage.position))
+                                holdingMaterial = true
+                                CNPStarted = true
+
+                            } else {
+                                log.error("Tried to pick up material but failed!")
+                            }
+                        }
+                        // Tried to make a move
+                        else {
+                            if (actionResponse.state) {
+
+                            } else {
+                                log.error("Move failed!! This should not happen.")
+                            }
+                        }
+                    }
+                }
+
             }
-        }
-        /*TODO: - GET POSITIONS FROM EACH REPAIR-AGENT
+            /*TODO: - GET POSITIONS FROM EACH REPAIR-AGENT
            - GET EFFICIENCIES OF EACH AGENT
            - ACCEPT MOST EFFICIENT AGENT AND GO TO HIM ON SHORTEST PATH
            - GET DISTANCES
 
         */
+        }
 
     }
 }
