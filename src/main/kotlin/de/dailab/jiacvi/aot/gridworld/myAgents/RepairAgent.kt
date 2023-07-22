@@ -40,6 +40,12 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
         }
         return nearestRepairPoint
     }
+
+    fun getMeetingPoint(collectorPos: Position, currentPosition: Position):List<WorkerAction>{
+        val wa: List<WorkerAction> = shortestPath(obstacles, size, currentPosition, collectorPos)
+        return wa.slice(0..wa.size/2)
+    }
+
     fun calculateEfficiency(collectorPos: Position, overhead: Int): Int{
         val NearestRP: Int = shortestPath(obstacles, size, currentPosition, getNearestRepairPoint()).size
         val distanceCollector: Int = shortestPath(obstacles, size, currentPosition, collectorPos).size
