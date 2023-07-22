@@ -35,9 +35,20 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
 
 
     fun getRandomTarget(currentPosition: Position) {
-        possiblePositions = mutableListOf<Position>(currentPosition + Position(0, 1),
+        var possiblePositions = mutableListOf<Position>(
+            currentPosition + Position(0, 1),
             currentPosition + Position(1, 0),
-            currentPosition + )
+            currentPosition + Position(1, 1),
+            currentPosition + Position(0, -1),
+            currentPosition + Position(-1, 0),
+            currentPosition + Position(-1, -1),
+            currentPosition + Position(1, -1),
+            currentPosition + Position(-1, 1)
+            )
+        return possiblePositions.filter {
+            position ->
+            position.
+        }
     }
 
     override fun behaviour() = act {
