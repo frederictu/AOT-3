@@ -10,7 +10,7 @@ data class RepairAgentPosition(val position: Position)
 data class CFP(val collectAgentID: String, val mypos: Position)
 data class CNPCollectAgentResponse(val collectAgentID: String, val response: Boolean)
 // When offer == -1, contract declined
-data class CNPRepairAgentOffer(val repairAgentID: String, val offeredPosition: Position, val deadline: Int, val offer: Int)
+data class CNPRepairAgentOffer(val repairAgentID: String, val offeredPosition: Position, val deadline: Int)
 
 data class CNPRepairAgentResult(val success:Boolean)
 
@@ -32,6 +32,23 @@ fun getActionPositions() : List<Pair<WorkerAction, Position>> {
         WorkerAction.NORTHWEST to Position(-1, -1)
     )
 }
+
+fun getPathPositions(start: Position, path: List<WorkerAction>): List<Position> {
+    val actionPositions = getActionPositions().toMap()
+    var currentPosition = start
+    val pathPositions = mutableListOf<Position>()
+
+    path.forEach { action ->
+        val delta = actionPositions[action]
+        if (delta != null) {
+            currentPosition = Position(currentPosition.x + delta.x, currentPosition.y + delta.y)
+            pathPositions.add(currentPosition)
+        }
+    }
+
+    return pathPositions
+}
+
 
 fun shortestPath(obstacles: List<Position>?, gridSize: Position, currentPosition: Position, target: Position): List<WorkerAction> {
 

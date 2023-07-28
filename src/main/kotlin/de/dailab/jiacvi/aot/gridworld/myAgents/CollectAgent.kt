@@ -39,6 +39,7 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
 
     private var CNPStarted = false
     private var CNPOffers = mutableListOf<CNPRepairAgentOffer>()
+    private var meetupDeadline = -1
 
     override fun preStart() {
     }
@@ -72,7 +73,7 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
     }
 
     private fun getBestOffer(): CNPRepairAgentOffer? {
-        return CNPOffers.minBy { it.offer }
+        return CNPOffers.minBy { it.deadline }
     }
 
     override fun behaviour() = act {
@@ -83,7 +84,7 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
             repairPoints = it.repairPoints
             obstacles = it.obstacles
         }
-        on<CNPRepairAgentOffer>{
+        on<CNPRepairAgentOffer> {
                 newOffer ->
                 CNPOffers.add(newOffer)
                 if (CNPOffers.size >= repairIds.size) {
@@ -94,7 +95,11 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
                     CNPOffers.forEach {
                         offer ->
                         val accepted = offer.repairAgentID == bestOffer!!.repairAgentID
-                        system.resolve(offer.repairAgentID) tell CNPCollectAgentResponse(offer.repairAgentID, accepted)
+                        log.debug("Sending offer response: {} {}", offer.repairAgentID, accepted)
+                        system.resolve(offer.repairAgentID) tell CNPCollectAgentResponse(collectID, accepted)
+                        if (accepted) {
+                            meetupDeadline = offer.deadline
+                        }
                     }
                     CNPStarted = false
                     CNPOffers.clear()
@@ -142,8 +147,7 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
                 if (targetAction == null) {
                     val targetRepairAgent = targetRepairAgentID
                     if (holdingMaterial && targetRepairAgent !== null) {
-                        //system.resolve("server") tell TransferMaterial(collectID, targetRepairAgent)
-                        holdingMaterial = false
+                        meetupDeadline = -1
                         currentPath.clear()
                         currentPath.addAll(getPathToNearestMaterial(currentPositionMessage.position)!!)
                     } else if (!holdingMaterial && activeMaterials.contains(currentPositionMessage.position)) {
