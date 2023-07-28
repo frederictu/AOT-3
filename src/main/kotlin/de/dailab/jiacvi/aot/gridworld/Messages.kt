@@ -17,7 +17,7 @@ data class SetupGameResponse(
 
 /** SetupAgent -> Server (tell), starts the game, replied with boolean */
 data class StartGame(val setupId: String)
-/** Server -> SetupAgent (tell), result = succes if 0 open repairs */
+/** Server -> SetupAgent (tell), result = success if 0 open repairs */
 data class EndGameMessage(val turn: Int, val openRepairs: Int, val result: String)
 
 /** Server -> "broadcast", current turn */
