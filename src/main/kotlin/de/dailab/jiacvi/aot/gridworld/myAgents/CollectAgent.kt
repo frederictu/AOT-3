@@ -7,7 +7,7 @@ import de.dailab.jiacvi.behaviour.act
 import java.util.*
 import kotlin.random.Random
 
-class CollectAgent (private val collectID: String): Agent(overrideName=collectID) {
+class CollectAgent(private val collectID: String) : Agent(overrideName = collectID) {
     /* TODO
         - this WorkerAgent has the ability to collect material
         - NOTE: can not walk on open repairpoints, can not drop material
@@ -35,11 +35,11 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
     private var deadMaterials = mutableSetOf<Position>()
     private var visited = mutableSetOf<Position>()
     private var targetRepairAgentID: String? = null
-
+    private var myPosition: Position? = null
 
     private var CNPStarted = false
     private var CNPOffers = mutableListOf<CNPRepairAgentOffer>()
-    private var meetupDeadline = -1
+    private var meetupDeadline: Int? = null
 
     override fun preStart() {
     }
@@ -49,7 +49,8 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
         for ((action, movement) in getActionPositions()) {
             val newPosition = currentPosition + movement
             if (newPosition.x in 0 until size.x && newPosition.y in 0 until size.y
-                && !obstacles!!.contains(newPosition) && !visited.contains(newPosition)) {
+                && !obstacles!!.contains(newPosition) && !visited.contains(newPosition)
+            ) {
                 possibleActions.add(action)
             }
         }
@@ -63,9 +64,9 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
     private fun getPathToNearestMaterial(currentPosition: Position): List<WorkerAction>? {
         var min: Int = Int.MAX_VALUE
         var shortestPath: List<WorkerAction>? = null
-        for( materialPosition in activeMaterials) {
+        for (materialPosition in activeMaterials) {
             shortestPath = shortestPath(obstacles, size, currentPosition, materialPosition)
-            if( shortestPath.size < min ){
+            if (shortestPath.size < min) {
                 min = shortestPath.size
             }
         }
@@ -84,29 +85,30 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
             repairPoints = it.repairPoints
             obstacles = it.obstacles
         }
-        on<CNPRepairAgentOffer> {
-                newOffer ->
-                CNPOffers.add(newOffer)
-                if (CNPOffers.size >= repairIds.size) {
-                    val bestOffer =  getBestOffer()
-                    if (bestOffer == null) {
-                        log.error("No best offer found!! This should not happen.")
-                    }
-                    CNPOffers.forEach {
-                        offer ->
-                        val accepted = offer.repairAgentID == bestOffer!!.repairAgentID
-                        log.debug("Sending offer response: {} {}", offer.repairAgentID, accepted)
-                        system.resolve(offer.repairAgentID) tell CNPCollectAgentResponse(collectID, accepted)
-                        if (accepted) {
-                            meetupDeadline = offer.deadline
-                        }
-                    }
-                    CNPStarted = false
-                    CNPOffers.clear()
+        on<CNPRepairAgentOffer> { newOffer ->
+            CNPOffers.add(newOffer)
+            if (CNPOffers.size >= repairIds.size) {
+                val bestOffer = getBestOffer()
+                if (bestOffer == null) {
+                    log.error("No best offer found!! This should not happen.")
                 }
+                CNPOffers.forEach { offer ->
+                    val accepted = offer.repairAgentID == bestOffer!!.repairAgentID
+                    log.debug("Sending offer response: {} {}", offer.repairAgentID, accepted)
+                    system.resolve(offer.repairAgentID) tell CNPCollectAgentResponse(collectID, accepted)
+                    if (accepted) {
+                        currentPath.clear()
+                        currentPath.addAll(shortestPath(obstacles, size, myPosition!!, offer.offeredPosition))
+                        meetupDeadline = offer.deadline
+                    }
+                }
+                CNPStarted = false
+                CNPOffers.clear()
+            }
 
         }
         on<CurrentPosition> { currentPositionMessage ->
+            myPosition = currentPositionMessage.position
             log.info("Received current position: $currentPositionMessage")
             if (CNPStarted) {
                 log.warn("New round started while CNP running! Skipping requests this round.")
@@ -145,15 +147,17 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
                 // Got to the end of path
                 // Either standing on meeting point or on material
                 if (targetAction == null) {
-                    val targetRepairAgent = targetRepairAgentID
-                    if (holdingMaterial && targetRepairAgent !== null) {
+                    if (holdingMaterial && targetRepairAgentID != null && meetupDeadline != null &&
+                        meetupDeadline!! == currentPositionMessage.gameTurn
+                    ) {
+                        targetRepairAgentID = null
                         meetupDeadline = -1
                         currentPath.clear()
                         currentPath.addAll(getPathToNearestMaterial(currentPositionMessage.position)!!)
                     } else if (!holdingMaterial && activeMaterials.contains(currentPositionMessage.position)) {
                         targetAction = WorkerAction.TAKE
                     } else {
-                        log.error("Got to meeting point but no target agent or material found!")
+                        log.error("Got to meeting point but no target agent or material found! My id: $collectID, my pos: ${currentPositionMessage.position}")
                     }
                 }
                 if (targetAction != null) {
@@ -171,7 +175,21 @@ class CollectAgent (private val collectID: String): Agent(overrideName=collectID
                                 CNPStarted = true
 
                             } else {
-                                log.error("Tried to pick up material but failed!")
+                                activeMaterials.remove(currentPositionMessage.position)
+                                deadMaterials.add(currentPositionMessage.position)
+                                if (activeMaterials.isEmpty()) {
+                                    randomWalk = true
+                                } else {
+                                    currentPath.clear()
+                                    currentPath.addAll(
+                                        shortestPath(
+                                            obstacles,
+                                            size,
+                                            currentPositionMessage.position,
+                                            activeMaterials.first()
+                                        )
+                                    )
+                                }
                             }
                         }
                         // Tried to make a move

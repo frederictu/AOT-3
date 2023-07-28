@@ -6,7 +6,7 @@ import de.dailab.jiacvi.behaviour.act
 import java.util.*
 import kotlin.random.Random
 
-class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
+class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
     /* TODO
         - this WorkerAgent has the ability to drop material
         - NOTE: can walk on open repairpoints, can not collect material
@@ -16,6 +16,7 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
 
     lateinit var size: Position
     lateinit var currentPosition: Position
+    lateinit var requestedPosition: Position
     lateinit var repairIds: List<String>
     lateinit var collectorIDs: List<String>
     lateinit var repairPoints: List<Position>
@@ -23,7 +24,8 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
     private var visited = mutableSetOf<Position>()
     private var activeMaterials = mutableSetOf<Position>()
     var acceptedCFP: CFP? = null
-    var sentCNPOffer : CNPRepairAgentOffer? = null
+    var sentCNPOffer: CNPRepairAgentOffer? = null
+    var meetupDeadline: Int? = null
     private var firstRound = true
 
     private var currentPath = Stack<WorkerAction>()
@@ -36,25 +38,27 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
 
     }
 
-    fun getNearestRepairPoint():Position{
+    fun getNearestRepairPoint(): Position {
         var min: Int = Int.MAX_VALUE
-        var nearestRepairPoint: Position = Position(-1,-1)
+        var nearestRepairPoint: Position = Position(-1, -1)
         var shortestPath: Int
-        for( repairPoint in repairPoints) {
+        for (repairPoint in repairPoints) {
             shortestPath = shortestPath(obstacles, size, currentPosition, repairPoint).size
-            if( shortestPath < min){
+            if (shortestPath < min) {
                 min = shortestPath
                 nearestRepairPoint = repairPoint
             }
         }
         return nearestRepairPoint
     }
+
     private fun getRandomTarget(currentPosition: Position): WorkerAction? {
         val possibleActions = mutableListOf<WorkerAction>()
         for ((action, movement) in getActionPositions()) {
             val newPosition = currentPosition + movement
             if (newPosition.x in 0 until size.x && newPosition.y in 0 until size.y
-                && !obstacles!!.contains(newPosition) && !visited.contains(newPosition)) {
+                && !obstacles!!.contains(newPosition) && !visited.contains(newPosition)
+            ) {
                 possibleActions.add(action)
             }
         }
@@ -70,7 +74,7 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
         var shortestPath: List<WorkerAction>? = null
         for (repairPosition in repairPoints) {
             shortestPath = shortestPath(obstacles, size, currentPosition, repairPosition)
-            if( shortestPath.size < min ){
+            if (shortestPath.size < min) {
                 min = shortestPath.size
             }
         }
@@ -87,68 +91,81 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
             repairPoints = it.repairPoints
             obstacles = it.obstacles
         }
-        listen<CFP>(CFP_TOPIC_NAME) {
-                cfpMessage ->
-            log.info("Received the offer")
+        listen<CFP>(CFP_TOPIC_NAME) { cfpMessage ->
+            log.info("Received CFP")
             if (acceptedCFP == null) {
                 var deadline = 0
                 var meetingPoint: Position? = null
                 if (holdingMaterial) {
-                    // +1 to drop the material in one round
                     val nearestRepair = getNearestRepairPoint()
-                    val pathToRepairPoint = shortestPath(obstacles, size, currentPosition, nearestRepair)
+                    val pathToRepairPoint = shortestPath(obstacles, size, requestedPosition, nearestRepair)
                     val pathRepairToCollectAgent = shortestPath(obstacles, size, nearestRepair, cfpMessage.mypos)
                     val totalPathLength = pathToRepairPoint.size + pathRepairToCollectAgent.size
-                    // + 1 to drop item
-                    val middle = (totalPathLength / 2) + 1
-                    if (middle > pathToRepairPoint.size) {
-                        meetingPoint = getPathPositions(nearestRepair, pathRepairToCollectAgent)[middle - pathToRepairPoint.size - 1]
+
+                    var middle = totalPathLength / 2
+                    if (middle > 0) {
+                        middle--
                     }
-                    else {
-                        meetingPoint = getPathPositions(currentPosition, pathToRepairPoint)[middle]
+                    meetingPoint = if (middle > pathToRepairPoint.size) {
+                        getPathPositions(
+                            nearestRepair,
+                            pathRepairToCollectAgent
+                        )[middle - pathToRepairPoint.size - 1]
+                    } else {
+                        getPathPositions(requestedPosition, pathToRepairPoint)[middle]
                     }
-                    deadline = currentRound + middle
-                }
-                else {
-                    val pathRepairAgentToColectAgent = shortestPath(obstacles, size, currentPosition, cfpMessage.mypos)
-                    val middle = pathRepairAgentToColectAgent.size / 2
-                    meetingPoint = getPathPositions(currentPosition, pathRepairAgentToColectAgent)[middle]
-                    deadline = currentRound + middle
+                    // +1 to drop the material in one round, +1 to offset 0-index
+                    val myDeadline = currentRound + middle + 2
+                    val theirDeadline = currentRound + (totalPathLength - middle) + 1
+                    deadline = maxOf(myDeadline, theirDeadline)
+                } else {
+                    val pathRepairAgentToColectAgent =
+                        shortestPath(obstacles, size, requestedPosition, cfpMessage.mypos)
+                    var middle = pathRepairAgentToColectAgent.size / 2
+                    if (middle > 0) {
+                        middle--
+                    }
+                    meetingPoint = getPathPositions(requestedPosition, pathRepairAgentToColectAgent)[middle]
+                    log.debug("Meeting point: {}", meetingPoint)
+                    log.debug("Path: {}", pathRepairAgentToColectAgent)
+                    log.debug("Current round: {}", currentRound)
+                    log.debug("Middle: {}", middle)
+                    val myDeadline = currentRound + middle + 1
+                    val theirDeadline = currentRound + (pathRepairAgentToColectAgent.size - middle) + 1
+                    deadline = maxOf(myDeadline, theirDeadline)
                 }
                 log.debug("Making offer to {}: {}, {}", cfpMessage.collectAgentID, meetingPoint, deadline)
                 val CNPOffer = CNPRepairAgentOffer(repairID, meetingPoint, deadline)
                 system.resolve(cfpMessage.collectAgentID) tell CNPOffer
                 sentCNPOffer = CNPOffer
                 acceptedCFP = cfpMessage
-            }
-            else {
-                system.resolve(cfpMessage.collectAgentID) tell CNPRepairAgentOffer(repairID,Position(0,0), 0)
+                meetupDeadline = deadline
+            } else {
+                system.resolve(cfpMessage.collectAgentID) tell CNPRepairAgentOffer(repairID, Position(0, 0), 0)
                 log.debug("Already waiting for response from ${acceptedCFP?.collectAgentID}")
 
             }
         }
-        on<CNPCollectAgentResponse> {
-            cnpResponse ->
-
+        on<CNPCollectAgentResponse> { cnpResponse ->
             if (cnpResponse.collectAgentID == acceptedCFP?.collectAgentID) {
                 log.debug("Got picked for the job! Pathfinding to: {}", sentCNPOffer!!.offeredPosition)
                 currentPath.clear()
-                currentPath.addAll(shortestPath(obstacles, size, currentPosition, sentCNPOffer!!.offeredPosition))
-                acceptedCFP = null
+                currentPath.addAll(shortestPath(obstacles, size, requestedPosition, sentCNPOffer!!.offeredPosition))
+                log.debug("Current path: {}", currentPath)
                 sentCNPOffer = null
             }
 
         }
         on<TransferInform> {
-            // TODO: find path to closest hole, set
-            val nearest: Position = getNearestRepairPoint()
-            val path: List<WorkerAction> = shortestPath(obstacles, size, currentPosition, nearest)
-
+            holdingMaterial = true
+            currentPath.clear()
+            currentPath.addAll(getPathToNearestRepairPoint(requestedPosition)!!)
+            log.debug("Got material, pathfinding to: {}", currentPath.last())
         }
-        on<CurrentPosition> { currentPos ->
-            log.info("Received current position: $currentPos")
-            currentPosition = currentPos.position
-            currentRound = currentPos.gameTurn
+        on<CurrentPosition> { currentPositionMessage ->
+            log.info("Received current position: $currentPositionMessage")
+            currentPosition = currentPositionMessage.position
+            currentRound = currentPositionMessage.gameTurn
             if (firstRound) {
                 val path = getPathToNearestRepairPoint(currentPosition)
                 log.debug(path.toString())
@@ -157,10 +174,9 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
                 firstRound = false;
             }
 
-            if (acceptedCFP != null) {
+            if (sentCNPOffer != null) {
                 log.warn("New round started while CNP running, skipping round!")
-            }
-            else {
+            } else {
                 var targetAction: WorkerAction? = null;
 
                 if (currentPath.isNotEmpty()) {
@@ -170,22 +186,27 @@ class RepairAgent (val repairID: String): Agent(overrideName=repairID) {
                 // Got to the end of path
                 // Either standing on meeting point or on repair point
                 if (targetAction == null) {
-                    val targetCollectAgent = acceptedCFP?.collectAgentID
-                    if (holdingMaterial && !repairPoints.contains(currentPos.position) && targetCollectAgent != null) {
-                        system.resolve("server") tell TransferMaterial(repairID, targetCollectAgent)
-                        holdingMaterial = false
-                        currentPath.clear()
-                        currentPath.addAll(getPathToNearestRepairPoint(currentPos.position)!!)
-                    } else if (holdingMaterial && repairPoints.contains(currentPos.position)) {
+                    if (!holdingMaterial && acceptedCFP != null && meetupDeadline != null &&
+                        meetupDeadline!! == currentPositionMessage.gameTurn
+                    ) {
+                        log.info("Picking up material")
+                        system.resolve("server") tell TransferMaterial(acceptedCFP?.collectAgentID!!, repairID)
+                        acceptedCFP = null
+                        holdingMaterial = true
+                        meetupDeadline = null
+                    } else if (holdingMaterial && repairPoints.contains(currentPositionMessage.position)) {
                         targetAction = WorkerAction.DROP
-                    } else if (!holdingMaterial && targetCollectAgent == null) {
-                        currentPath.addAll(getPathToNearestRepairPoint(currentPos.position)!!)
-                    }
-                    else {
+                    } else if (!holdingMaterial && acceptedCFP == null) {
+                        currentPath.clear()
+                        currentPath.addAll(getPathToNearestRepairPoint(currentPositionMessage.position)!!)
+                    } else {
                         log.error("Got to meeting point but no target agent or material found!")
                     }
                 }
                 if (targetAction != null) {
+                    if (targetAction != WorkerAction.DROP) {
+                        requestedPosition = positionFromDirection(currentPositionMessage.position, targetAction)
+                    }
                     system.resolve("server") invoke ask<WorkerActionResponse>(
                         WorkerActionRequest(repairID, targetAction)
                     ) { actionResponse ->
