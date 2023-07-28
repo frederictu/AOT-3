@@ -4,16 +4,8 @@ import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.aot.gridworld.*
 import de.dailab.jiacvi.behaviour.act
 import java.util.*
-import kotlin.random.Random
 
 class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
-    /* TODO
-        - this WorkerAgent has the ability to drop material
-        - NOTE: can walk on open repairpoints, can not collect material
-        - participate in cnp instances, meet with CollectAgent, get material
-        - go to repairpoint, drop material
-     */
-
     lateinit var size: Position
     lateinit var currentPosition: Position
     lateinit var requestedPosition: Position
@@ -21,8 +13,7 @@ class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
     lateinit var collectorIDs: List<String>
     lateinit var repairPoints: List<Position>
     private var holdingMaterial = false
-    private var visited = mutableSetOf<Position>()
-    private var activeMaterials = mutableSetOf<Position>()
+
     var acceptedCFP: CFP? = null
     var sentCNPOffer: CNPRepairAgentOffer? = null
     var meetupDeadline: Int? = null
@@ -32,11 +23,6 @@ class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
     private var currentRound = 0
 
     var obstacles: List<Position>? = null
-
-
-    override fun preStart() {
-
-    }
 
     fun getNearestRepairPoint(): Position {
         var min: Int = Int.MAX_VALUE
@@ -50,23 +36,6 @@ class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
             }
         }
         return nearestRepairPoint
-    }
-
-    private fun getRandomTarget(currentPosition: Position): WorkerAction? {
-        val possibleActions = mutableListOf<WorkerAction>()
-        for ((action, movement) in getActionPositions()) {
-            val newPosition = currentPosition + movement
-            if (newPosition.x in 0 until size.x && newPosition.y in 0 until size.y
-                && !obstacles!!.contains(newPosition) && !visited.contains(newPosition)
-            ) {
-                possibleActions.add(action)
-            }
-        }
-        return if (possibleActions.isNotEmpty()) {
-            possibleActions[Random.nextInt(possibleActions.size)]
-        } else {
-            null
-        }
     }
 
     fun getPathToNearestRepairPoint(currentPosition: Position): List<WorkerAction>? {
@@ -116,7 +85,7 @@ class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
                     }
                     // +1 to drop the material in one round, +1 to offset 0-index
                     val myDeadline = currentRound + middle + 2
-                    val theirDeadline = currentRound + (totalPathLength - middle) + 1
+                    val theirDeadline = currentRound + (totalPathLength - middle)
                     deadline = maxOf(myDeadline, theirDeadline)
                 } else {
                     val pathRepairAgentToColectAgent =
@@ -131,7 +100,7 @@ class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
                     log.debug("Current round: {}", currentRound)
                     log.debug("Middle: {}", middle)
                     val myDeadline = currentRound + middle + 1
-                    val theirDeadline = currentRound + (pathRepairAgentToColectAgent.size - middle) + 1
+                    val theirDeadline = currentRound + (pathRepairAgentToColectAgent.size - middle)
                     deadline = maxOf(myDeadline, theirDeadline)
                 }
                 log.debug("Making offer to {}: {}, {}", cfpMessage.collectAgentID, meetingPoint, deadline)
@@ -199,8 +168,10 @@ class RepairAgent(val repairID: String) : Agent(overrideName = repairID) {
                     } else if (!holdingMaterial && acceptedCFP == null) {
                         currentPath.clear()
                         currentPath.addAll(getPathToNearestRepairPoint(currentPositionMessage.position)!!)
+                    } else if (meetupDeadline!! > currentPositionMessage.gameTurn && acceptedCFP != null) {
+                        log.debug("Waiting for other agent (${acceptedCFP?.collectAgentID!!}) to arrive at meeting point")
                     } else {
-                        log.error("Got to meeting point but no target agent or material found!")
+                        log.debug("Got to destination but no target agent or material found!")
                     }
                 }
                 if (targetAction != null) {

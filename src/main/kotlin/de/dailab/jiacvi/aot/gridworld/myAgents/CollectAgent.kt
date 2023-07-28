@@ -8,17 +8,6 @@ import java.util.*
 import kotlin.random.Random
 
 class CollectAgent(private val collectID: String) : Agent(overrideName = collectID) {
-    /* TODO
-        - this WorkerAgent has the ability to collect material
-        - NOTE: can not walk on open repairpoints, can not drop material
-        - find material, collect it, start a cnp instance
-        - once your cnp is done, meet the RepairAgents and transfer the material
-        CNP
-        - notify all repair Agents as soon as Materials are found
-        - get offers from Agents (offers are calculated execution times)
-        - accept most efficient agent and go to dropoff
-     */
-
     // msgBroker only used for sending broadcasts
     private val msgBroker by resolve<BrokerAgentRef>()
 
@@ -156,8 +145,10 @@ class CollectAgent(private val collectID: String) : Agent(overrideName = collect
                         currentPath.addAll(getPathToNearestMaterial(currentPositionMessage.position)!!)
                     } else if (!holdingMaterial && activeMaterials.contains(currentPositionMessage.position)) {
                         targetAction = WorkerAction.TAKE
+                    } else if (meetupDeadline!! > currentPositionMessage.gameTurn && targetRepairAgentID != null) {
+                        log.debug("Waiting for other agent (${targetRepairAgentID}) to arrive at meeting point")
                     } else {
-                        log.error("Got to meeting point but no target agent or material found! My id: $collectID, my pos: ${currentPositionMessage.position}")
+                        log.debug("Got to destination but no target agent or material found!")
                     }
                 }
                 if (targetAction != null) {
@@ -202,15 +193,7 @@ class CollectAgent(private val collectID: String) : Agent(overrideName = collect
                         }
                     }
                 }
-
             }
-            /*TODO: - GET POSITIONS FROM EACH REPAIR-AGENT
-           - GET EFFICIENCIES OF EACH AGENT
-           - ACCEPT MOST EFFICIENT AGENT AND GO TO HIM ON SHORTEST PATH
-           - GET DISTANCES
-
-        */
         }
-
     }
 }
